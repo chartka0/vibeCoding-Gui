@@ -12,6 +12,7 @@ import DiagnosticsPanel from "./components/panels/DiagnosticsPanel.vue";
 import TestPanel from "./components/panels/TestPanel.vue";
 import SpecPanel from "./components/panels/SpecPanel.vue";
 import CommitPanel from "./components/panels/CommitPanel.vue";
+import RollbackPanel from "./components/panels/RollbackPanel.vue";
 
 const selectedKey = ref('workflow');
 
@@ -47,7 +48,7 @@ const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: s
             <TestPanel v-else-if="selectedKey === 'test'" />
             <SpecPanel v-else-if="selectedKey === 'spec'" />
             <CommitPanel v-else-if="selectedKey === 'commit'" />
-            <div v-else-if="selectedKey === 'rollback'" />
+            <RollbackPanel v-else-if="selectedKey === 'rollback'" />
             <div v-else-if="selectedKey === 'settings'" />
             <div v-else style="display:flex; justify-content:center; align-items:center; height: 100%; color: #555; font-size: 14px;">
               模块开发中...
