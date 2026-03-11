@@ -9,6 +9,7 @@ import PlanPanel from "./components/panels/PlanPanel.vue";
 import BuildPanel from "./components/panels/BuildPanel.vue";
 import ReviewPanel from "./components/panels/ReviewPanel.vue";
 import DiagnosticsPanel from "./components/panels/DiagnosticsPanel.vue";
+import TestPanel from "./components/panels/TestPanel.vue";
 
 const selectedKey = ref('workflow');
 
@@ -41,7 +42,7 @@ const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: s
             <BuildPanel v-else-if="selectedKey === 'build'" />
             <ReviewPanel v-else-if="selectedKey === 'review'" />
             <DiagnosticsPanel v-else-if="selectedKey === 'diagnostics'" />
-            <div v-else-if="selectedKey === 'test'" />
+            <TestPanel v-else-if="selectedKey === 'test'" />
             <div v-else-if="selectedKey === 'spec'" />
             <div v-else-if="selectedKey === 'commit'" />
             <div v-else-if="selectedKey === 'rollback'" />
