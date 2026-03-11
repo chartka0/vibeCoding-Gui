@@ -7,6 +7,7 @@ import Header from "./components/layout/Header.vue";
 import WorkflowPanel from "./components/panels/WorkflowPanel.vue";
 import PlanPanel from "./components/panels/PlanPanel.vue";
 import BuildPanel from "./components/panels/BuildPanel.vue";
+import ReviewPanel from "./components/panels/ReviewPanel.vue";
 
 const selectedKey = ref('workflow');
 
@@ -37,7 +38,7 @@ const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: s
             <WorkflowPanel v-if="selectedKey === 'workflow'" />
             <PlanPanel v-else-if="selectedKey === 'plan'" />
             <BuildPanel v-else-if="selectedKey === 'build'" />
-            <div v-else-if="selectedKey === 'review'" />
+            <ReviewPanel v-else-if="selectedKey === 'review'" />
             <div v-else-if="selectedKey === 'diagnostics'" />
             <div v-else-if="selectedKey === 'test'" />
             <div v-else-if="selectedKey === 'spec'" />
