@@ -1,31 +1,48 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { darkTheme, NConfigProvider, NMessageProvider, NLayout, NLayoutContent } from "naive-ui";
 
 import Sidebar from "./components/layout/Sidebar.vue";
 import Header from "./components/layout/Header.vue";
-import ExecutePanel from "./components/panels/ExecutePanel.vue";
 
-const selectedKey = ref('execute');
+const selectedKey = ref('workflow');
+
+const panelTitles: Record<string, { title: string; subtitle?: string }> = {
+  workflow: { title: '完整心流', subtitle: '/ccg:workflow' },
+  plan: { title: '规划面板', subtitle: '/ccg:plan' },
+  build: { title: '构建监控', subtitle: '/ccg:execute' },
+  review: { title: '代码审查', subtitle: '/ccg:review' },
+  diagnostics: { title: '诊断优化', subtitle: '/ccg:debug' },
+  test: { title: '测试面板', subtitle: '/ccg:test' },
+  spec: { title: '约束画板', subtitle: '/ccg:spec-research' },
+  commit: { title: '智能提交', subtitle: '/ccg:commit' },
+  rollback: { title: '时光机', subtitle: '/ccg:rollback' },
+  settings: { title: '设置' },
+};
+
+const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: selectedKey.value });
 </script>
 
 <template>
   <n-config-provider :theme="darkTheme">
     <n-message-provider>
       <n-layout has-sider style="height: 100vh;">
-        <!-- Left Sider -->
         <Sidebar v-model:selectedKey="selectedKey" />
-        
-        <!-- Right Content -->
         <n-layout>
-          <!-- Header -->
-          <Header :title="selectedKey.toUpperCase()" />
-          
-          <!-- Main Content -->
-          <n-layout-content style="padding: 24px; background: #101014;">
-            <ExecutePanel v-if="selectedKey === 'execute'" />
-            <div v-else style="display:flex; justify-content:center; align-items:center; height: 100%; color: #666; font-size: 16px;">
-              [ {{ selectedKey }} ] 模块规划中...
+          <Header :title="currentPanel.title" :subtitle="currentPanel.subtitle" />
+          <n-layout-content style="padding: 20px; background: #101014; overflow-y: auto;" content-style="height: calc(100vh - 53px);">
+            <div v-if="selectedKey === 'workflow'" />
+            <div v-else-if="selectedKey === 'plan'" />
+            <div v-else-if="selectedKey === 'build'" />
+            <div v-else-if="selectedKey === 'review'" />
+            <div v-else-if="selectedKey === 'diagnostics'" />
+            <div v-else-if="selectedKey === 'test'" />
+            <div v-else-if="selectedKey === 'spec'" />
+            <div v-else-if="selectedKey === 'commit'" />
+            <div v-else-if="selectedKey === 'rollback'" />
+            <div v-else-if="selectedKey === 'settings'" />
+            <div v-else style="display:flex; justify-content:center; align-items:center; height: 100%; color: #555; font-size: 14px;">
+              模块开发中...
             </div>
           </n-layout-content>
         </n-layout>
