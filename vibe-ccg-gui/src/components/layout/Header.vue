@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NLayoutHeader, NSpace, NButton, NIcon, NTag } from "naive-ui";
-import { FlashOutline, LogoVue, CodeSlashOutline } from "@vicons/ionicons5";
+import { FlashOutline, BrowsersOutline, CodeSlashOutline } from "@vicons/ionicons5";
 
 defineProps<{
   title: string;
@@ -16,7 +16,7 @@ defineProps<{
     </div>
     <n-space :size="8">
       <n-button strong secondary type="info" size="small">
-        <template #icon><n-icon><LogoVue /></n-icon></template>
+        <template #icon><n-icon><BrowsersOutline /></n-icon></template>
         极速前端 (Gemini)
       </n-button>
       <n-button strong secondary type="warning" size="small">

@@ -7,7 +7,7 @@ import {
 import {
   RocketOutline, DocumentTextOutline, ChatbubblesOutline,
   CodeSlashOutline, GitBranchOutline, CheckmarkDoneOutline,
-  FlashOutline, LogoVue
+  FlashOutline, BrowsersOutline
 } from "@vicons/ionicons5";
 
 const currentStep = ref(0);
@@ -41,10 +41,10 @@ const workflowSteps = [
 
       <!-- Stats -->
       <div style="display: flex; justify-content: center; gap: 60px; padding: 16px 0 8px; border-top: 1px solid #2a2a2e; margin-top: 16px;">
-        <n-statistic label="模型引擎" value="3" />
-        <n-statistic label="工作阶段" value="6" />
-        <n-statistic label="斜杠命令" value="26" />
-        <n-statistic label="专家提示词" value="13" />
+        <n-statistic label="模型引擎" value="3" style="text-align: center;" />
+        <n-statistic label="工作阶段" value="6" style="text-align: center;" />
+        <n-statistic label="斜杠命令" value="26" style="text-align: center;" />
+        <n-statistic label="专家提示词" value="13" style="text-align: center;" />
       </div>
     </n-card>
 
@@ -68,10 +68,10 @@ const workflowSteps = [
       <n-gi>
         <n-card hoverable style="border-radius: 12px; cursor: pointer;">
           <div style="display: flex; align-items: center; gap: 12px;">
-            <n-icon :size="28" color="#63e2b7"><LogoVue /></n-icon>
+            <n-icon :size="28" color="#63e2b7"><BrowsersOutline /></n-icon>
             <div>
               <div style="font-weight: 600; font-size: 14px;">极速前端</div>
-              <div style="color: #888; font-size: 12px; margin-top: 2px;">Gemini 直出 Vue 组件</div>
+              <div style="color: #888; font-size: 12px; margin-top: 2px;">Gemini 生成前端 UI 代码</div>
             </div>
           </div>
           <div style="margin-top: 12px;">

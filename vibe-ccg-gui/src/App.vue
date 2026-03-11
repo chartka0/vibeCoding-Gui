@@ -40,7 +40,7 @@ const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: s
         <Sidebar v-model:selectedKey="selectedKey" />
         <n-layout>
           <Header :title="currentPanel.title" :subtitle="currentPanel.subtitle" />
-          <n-layout-content style="padding: 20px; background: #101014; overflow-y: auto;" content-style="height: calc(100vh - 53px);">
+          <n-layout-content style="padding: 20px; background: #101014;" :native-scrollbar="false">
             <WorkflowPanel v-if="selectedKey === 'workflow'" />
             <PlanPanel v-else-if="selectedKey === 'plan'" />
             <BuildPanel v-else-if="selectedKey === 'build'" />
