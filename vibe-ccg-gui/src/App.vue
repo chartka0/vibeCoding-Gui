@@ -5,6 +5,7 @@ import { darkTheme, NConfigProvider, NMessageProvider, NLayout, NLayoutContent }
 import Sidebar from "./components/layout/Sidebar.vue";
 import Header from "./components/layout/Header.vue";
 import WorkflowPanel from "./components/panels/WorkflowPanel.vue";
+import PlanPanel from "./components/panels/PlanPanel.vue";
 
 const selectedKey = ref('workflow');
 
@@ -33,7 +34,7 @@ const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: s
           <Header :title="currentPanel.title" :subtitle="currentPanel.subtitle" />
           <n-layout-content style="padding: 20px; background: #101014; overflow-y: auto;" content-style="height: calc(100vh - 53px);">
             <WorkflowPanel v-if="selectedKey === 'workflow'" />
-            <div v-else-if="selectedKey === 'plan'" />
+            <PlanPanel v-else-if="selectedKey === 'plan'" />
             <div v-else-if="selectedKey === 'build'" />
             <div v-else-if="selectedKey === 'review'" />
             <div v-else-if="selectedKey === 'diagnostics'" />
