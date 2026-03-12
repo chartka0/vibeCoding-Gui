@@ -237,10 +237,15 @@ pub async fn run_ccg_command(
     let full_prompt = format!("/{} {}", skill, prompt);
     let log_event = format!("step-log-{}", run_id);
 
-    let mut cmd = AsyncCommand::new("pwsh");
-    cmd.args(["-NoProfile", "-NonInteractive", "-Command",
-              &format!("claude -p '{}' --output-format stream-json --dangerously-skip-permissions",
-                       full_prompt.replace('\'', "''"))])
+    let bash_path = std::env::var("CLAUDE_CODE_GIT_BASH_PATH")
+        .unwrap_or_else(|_| "D:/RuanJian/Git/usr/bin/bash.exe".to_string());
+    let mut cmd = AsyncCommand::new(&bash_path);
+    let bash_cmd = format!(
+        "CLAUDE_CODE_GIT_BASH_PATH='{}' claude -p '{}' --output-format stream-json --dangerously-skip-permissions",
+        bash_path.replace('\\', "/"),
+        full_prompt.replace('\'', "'\\''")
+    );
+    cmd.args(["-c", &bash_cmd])
        .current_dir(&workspace_path)
        .stdout(Stdio::piped())
        .stderr(Stdio::piped());
