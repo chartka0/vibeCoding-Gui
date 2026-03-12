@@ -5,14 +5,51 @@ use crate::{Workspace, WorkflowRun};
 
 // Helper function to get the database path
 pub fn get_db_path(app_handle: &tauri::AppHandle) -> PathBuf {
-    let app_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
-    // tauri-plugin-sql stores the db in the app local data dir
+    let app_dir = app_handle.path().app_local_data_dir().expect("Failed to get app local data dir");
+    std::fs::create_dir_all(&app_dir).expect("Failed to create app data dir");
     app_dir.join("vibe-ccg.db")
 }
 
 pub fn get_connection(app_handle: &tauri::AppHandle) -> Result<Connection> {
     let db_path = get_db_path(app_handle);
-    Connection::open(db_path)
+    let conn = Connection::open(db_path)?;
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            path TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS workflow_runs (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            mode TEXT,
+            prompt TEXT,
+            status TEXT NOT NULL,
+            logs_path TEXT,
+            start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            end_time DATETIME,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+        );
+        CREATE TABLE IF NOT EXISTS workflow_steps (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            step_index INTEGER NOT NULL,
+            step_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            input_prompt TEXT,
+            output_text TEXT,
+            output_summary TEXT,
+            session_id TEXT,
+            codex_session TEXT,
+            gemini_session TEXT,
+            start_time DATETIME,
+            end_time DATETIME,
+            error_message TEXT,
+            FOREIGN KEY (run_id) REFERENCES workflow_runs(id)
+        );
+    ").map_err(|e| e)?;
+    Ok(conn)
 }
 
 pub fn insert_workspace(app_handle: &tauri::AppHandle, workspace: &Workspace) -> Result<()> {

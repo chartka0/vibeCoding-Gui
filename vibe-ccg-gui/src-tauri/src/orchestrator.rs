@@ -94,22 +94,19 @@ pub async fn execute_step(
     
     // Fallback Mock execution for development if claude is missing
     let mut output_accumulator = String::new();
-    let is_mock = true; // Set to false in production to run actual claude CLI
+    let is_mock = false; // Set to false in production to run actual claude CLI
     
     if is_mock {
         cmd.arg(if cfg!(windows) { "/C" } else { "-c" });
         cmd.arg(format!("echo [JSON_START] && echo {{\"status\": \"success\", \"step\": {}, \"message\": \"Mock result for {}: {}\"}} && timeout 2 > NUL", step_index, step_name, prompt));
     } else {
-        // Real Claude CLI invocation (adjust path/args as needed)
-        cmd.arg("claude")
-           .arg("-p")
-           .arg(&prompt)
-           .arg("--output-format").arg("stream-json")
-           .arg("--dangerously-skip-permissions");
-           
+        // Real claude CLI via cmd /C on Windows
+        cmd.arg("/C");
+        let mut claude_cmd = format!("claude -p \"{}\" --output-format stream-json --dangerously-skip-permissions", prompt.replace('"', "'"));
         if let Some(sid) = session_id.clone() {
-            cmd.arg("--session-id").arg(sid);
+            claude_cmd.push_str(&format!(" --session-id {}", sid));
         }
+        cmd.arg(claude_cmd);
     }
 
     cmd.current_dir(&workspace_path)
@@ -224,4 +221,59 @@ pub async fn get_run_steps(app: AppHandle, run_id: String) -> Result<Vec<Workflo
 pub async fn retry_step(app: AppHandle, step_id: String) -> Result<String, String> {
     update_step_status(&app, &step_id, "pending", None, None)?;
     Ok("Step reset".to_string())
+}
+
+/// Run a CCG slash command (e.g. /ccg:workflow, /ccg:frontend) by spawning
+/// `claude "/ccg:xxx {prompt}"` in the workspace directory and streaming
+/// stdout/stderr back to the frontend via Tauri events.
+#[tauri::command]
+pub async fn run_ccg_command(
+    app: AppHandle,
+    run_id: String,
+    workspace_path: String,
+    skill: String,   // e.g. "ccg:workflow", "ccg:frontend", "ccg:backend"
+    prompt: String,
+) -> Result<(), String> {
+    let full_prompt = format!("/{} {}", skill, prompt);
+    let log_event = format!("step-log-{}", run_id);
+
+    let mut cmd = AsyncCommand::new("pwsh");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command",
+              &format!("claude -p '{}' --output-format stream-json --dangerously-skip-permissions",
+                       full_prompt.replace('\'', "''"))])
+       .current_dir(&workspace_path)
+       .stdout(Stdio::piped())
+       .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+    // Stream stdout
+    let app_clone = app.clone();
+    let log_event_clone = log_event.clone();
+    if let Some(stdout) = child.stdout.take() {
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                let _ = app_clone.emit(&log_event_clone, line);
+            }
+        });
+    }
+
+    // Stream stderr
+    let app_clone2 = app.clone();
+    let log_event_clone2 = log_event.clone();
+    if let Some(stderr) = child.stderr.take() {
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                let _ = app_clone2.emit(&log_event_clone2, format!("[stderr] {}", line));
+            }
+        });
+    }
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    let final_status = if status.success() { "done" } else { "error" };
+    let _ = app.emit(&format!("run-done-{}", run_id), final_status);
+
+    Ok(())
 }

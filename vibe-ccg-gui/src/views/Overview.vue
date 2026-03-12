@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import { NCard, NGradientText, NButton, NIcon, NEmpty, NBadge, NSpace } from 'naive-ui';
-import { AddOutline, FolderOpenOutline, RocketOutline, FlashOutline } from '@vicons/ionicons5';
+import { FolderOpenOutline, RocketOutline, FlashOutline } from '@vicons/ionicons5';
 import { useWorkspaceStore } from '../store/workspace';
 
 import { open } from '@tauri-apps/plugin-dialog';
+import { openPath } from '@tauri-apps/plugin-opener';
 
 const workspaceStore = useWorkspaceStore();
 
@@ -19,10 +20,6 @@ onMounted(() => {
 function enterProject(id: string) {
   workspaceStore.currentWorkspaceId = id;
   emit('enter-workspace', id);
-}
-
-function createProject() {
-  // To be implemented: open a modal to create a new workspace
 }
 
 async function openExistingProject() {
@@ -44,21 +41,21 @@ async function openExistingProject() {
     }
   } catch (err) {
     console.error("对话框打开失败(如果在非桌面环境会报错):", err);
-    // Mock for browser dev environment
-    const mockId = "mock-" + Date.now();
-    workspaceStore.workspaces.unshift({
-      id: mockId,
-      name: "Mocked Local Project",
-      path: "D:\\WebData\\mocked-project",
-      created_at: new Date().toISOString()
-    });
-    enterProject(mockId);
   }
 }
 
-// Temporary mock to show a "running" project indicator
-function isRunning(id: string) {
-  return id === 'mock-id-1'; // Mock
+async function openFolder(path: string, event: MouseEvent) {
+  event.stopPropagation();
+  try {
+    await openPath(path);
+  } catch (err) {
+    console.error('打开目录失败:', err);
+  }
+}
+
+// Placeholder: running state will be driven by store in future
+function isRunning(_id: string) {
+  return false;
 }
 </script>
 
@@ -69,7 +66,7 @@ function isRunning(id: string) {
         <n-gradient-text type="info" :size="32" style="font-weight: 800; display: flex; align-items: center; gap: 12px;">
           <n-icon :size="28"><RocketOutline/></n-icon> vibeCoding
         </n-gradient-text>
-        <div style="color: #888; margin-top: 8px;">选择一个项目进入工作流，或者创建新项目</div>
+        <div style="color: #888; margin-top: 8px;">选择一个项目进入工作流</div>
       </div>
       
       <n-space>
@@ -77,29 +74,13 @@ function isRunning(id: string) {
           <template #icon><n-icon><FolderOpenOutline /></n-icon></template>
           打开本地项目
         </n-button>
-        <n-button type="info" size="large" @click="createProject">
-          <template #icon><n-icon><AddOutline /></n-icon></template>
-          新建项目
-        </n-button>
       </n-space>
     </div>
 
     <div v-if="workspaceStore.workspaces.length === 0" style="padding: 60px 0;">
-      <n-empty description="暂无项目记录。请打开本地已有项目或新建一个项目。">
+      <n-empty description="暂无项目记录。请点击右上角打开本地已有项目。">
         <template #icon>
           <n-icon><FolderOpenOutline /></n-icon>
-        </template>
-        <template #extra>
-          <n-space style="margin-top: 16px;">
-            <n-button type="default" @click="openExistingProject">
-              <template #icon><n-icon><FolderOpenOutline /></n-icon></template>
-              打开已有项目
-            </n-button>
-            <n-button type="info" @click="createProject">
-              <template #icon><n-icon><AddOutline /></n-icon></template>
-              创建新项目
-            </n-button>
-          </n-space>
         </template>
       </n-empty>
     </div>
@@ -128,8 +109,13 @@ function isRunning(id: string) {
                   <div style="font-size: 12px; color: #666;">
                     创建于: {{ new Date(ws.created_at).toLocaleDateString() }}
                   </div>
-                  <div v-if="isRunning(ws.id)" style="display: flex; align-items: center; gap: 4px; color: #63e2b7; font-size: 12px;">
-                    <n-icon><FlashOutline /></n-icon> 运行中
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <div v-if="isRunning(ws.id)" style="display: flex; align-items: center; gap: 4px; color: #63e2b7; font-size: 12px;">
+                      <n-icon><FlashOutline /></n-icon> 运行中
+                    </div>
+                    <n-button size="tiny" quaternary @click="openFolder(ws.path, $event)" title="在资源管理器中打开">
+                      <template #icon><n-icon><FolderOpenOutline /></n-icon></template>
+                    </n-button>
                   </div>
                 </div>
               </div>

@@ -138,6 +138,7 @@ pub fn run() {
             orchestrator::execute_step,
             orchestrator::retry_step,
             orchestrator::get_run_steps,
+            orchestrator::run_ccg_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -15,119 +15,116 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
 const workspaceStore = useWorkspaceStore();
 const workflowPrompt = ref('');
-const currentStepIndex = ref(1); // 1 to 6
+const currentStepIndex = ref(0); // 0 = not started
 const runId = ref<string | null>(null);
-
-const isLoading = ref(false);
+const isRunning = ref(false);
 const logs = ref<string[]>([]);
 
 const workflowSteps = [
-  { id: 'research', title: '研究', desc: '需求收集、上下文与分析', icon: DocumentTextOutline },
-  { id: 'ideation', title: '构思', desc: '双模型并行分析可行性', icon: ChatbubblesOutline },
-  { id: 'planning', title: '计划', desc: '多模型产出前后端架构规划', icon: CodeSlashOutline },
-  { id: 'execution', title: '执行', desc: '严格按批准计划编码实施', icon: FlashOutline },
-  { id: 'optimization', title: '优化', desc: '多模型并行审查安全与设计', icon: GitBranchOutline },
-  { id: 'review', title: '评审', desc: '最终评估与测试闭环交付', icon: CheckmarkDoneOutline },
+  { id: 'research',     title: '研究',  desc: '需求收集、上下文与分析',        icon: DocumentTextOutline },
+  { id: 'ideation',    title: '构思',  desc: '双模型并行分析可行性',            icon: ChatbubblesOutline },
+  { id: 'planning',    title: '计划',  desc: '多模型产出前后端架构规划',        icon: CodeSlashOutline },
+  { id: 'execution',   title: '执行',  desc: '严格按批准计划编码实施',          icon: FlashOutline },
+  { id: 'optimization',title: '优化',  desc: '多模型并行审查安全与设计',        icon: GitBranchOutline },
+  { id: 'review',      title: '评审',  desc: '最终评估与测试闭环交付',          icon: CheckmarkDoneOutline },
 ];
+
+// Map [模式：X] tag → step index
+const modeToStep: Record<string, number> = {
+  '研究': 1, '研究与分析': 1,
+  '构思': 2, '方案构思': 2,
+  '计划': 3, '详细规划': 3,
+  '执行': 4, '实施': 4,
+  '优化': 5, '代码优化': 5,
+  '评审': 6, '质量审查': 6,
+};
 
 const stepStatus = ref<Record<number, 'wait' | 'process' | 'finish' | 'error'>>({
   1: 'wait', 2: 'wait', 3: 'wait', 4: 'wait', 5: 'wait', 6: 'wait'
 });
 
-const stepResults = ref<Record<number, string>>({});
-
 let unlistenLog: UnlistenFn | null = null;
-let unlistenUpdate: UnlistenFn | null = null;
+let unlistenDone: UnlistenFn | null = null;
 
-async function setupListeners(id: string) {
-  if (unlistenLog) unlistenLog();
-  if (unlistenUpdate) unlistenUpdate();
-
-  unlistenLog = await listen<string>(`step-log-${id}`, (event) => {
-    logs.value.push(event.payload);
-  });
-
-  unlistenUpdate = await listen<any>(`step-update-${id}`, (event) => {
-    const data = event.payload;
-    if (data.status === 'running') stepStatus.value[data.step_index] = 'process';
-    else if (data.status === 'success') stepStatus.value[data.step_index] = 'finish';
-    else if (data.status === 'failed') stepStatus.value[data.step_index] = 'error';
-  });
-}
-
-async function startWorkflow(mode: 'full' | 'frontend' | 'backend') {
+async function startWorkflow(skill: 'ccg:workflow' | 'ccg:frontend' | 'ccg:backend') {
   const ws = workspaceStore.currentWorkspace;
   if (!ws || !workflowPrompt.value.trim()) return;
 
-  isLoading.value = true;
+  isRunning.value = true;
   logs.value = [];
   stepStatus.value = { 1: 'wait', 2: 'wait', 3: 'wait', 4: 'wait', 5: 'wait', 6: 'wait' };
-  currentStepIndex.value = 1;
+  currentStepIndex.value = 0;
 
   try {
     const id: string = await invoke('start_workflow_run', {
       workspaceId: ws.id,
-      mode,
+      mode: skill,
       prompt: workflowPrompt.value
     });
     runId.value = id;
-    await setupListeners(id);
-    await executeCurrentStep();
-  } catch (e: any) {
-    console.error("Start failed", e);
-  } finally {
-    isLoading.value = false;
-  }
-}
 
-async function executeCurrentStep() {
-  if (!runId.value) return;
-  const ws = workspaceStore.currentWorkspace;
-  if (!ws) return;
+    // Listen for log lines
+    if (unlistenLog) unlistenLog();
+    unlistenLog = await listen<string>(`step-log-${id}`, (event) => {
+      const line = event.payload;
+      logs.value.push(line);
 
-  const idx = currentStepIndex.value;
-  const stepDef = workflowSteps[idx - 1];
-  isLoading.value = true;
-  stepStatus.value[idx] = 'process';
-
-  try {
-    const result: any = await invoke('execute_step', {
-      runId: runId.value,
-      stepIndex: idx,
-      stepName: stepDef.id,
-      workspacePath: ws.path,
-      prompt: workflowPrompt.value, // In reality, we'd pass enhanced prompts here
-      sessionId: null // TODO: Pass session ID from previous steps
+      // Detect [模式：X] tags to drive step indicator
+      const match = line.match(/\[模式[：:]\s*([^\]]+)\]/);
+      if (match) {
+        const mode = match[1].trim();
+        const step = modeToStep[mode];
+        if (step) {
+          // Mark previous step done
+          if (currentStepIndex.value > 0) {
+            stepStatus.value[currentStepIndex.value] = 'finish';
+          }
+          currentStepIndex.value = step;
+          stepStatus.value[step] = 'process';
+        }
+      }
     });
 
-    stepStatus.value[idx] = result.status === 'success' ? 'finish' : 'error';
-    if (result.output_text) {
-      stepResults.value[idx] = result.output_text;
-    }
+    // Listen for completion
+    if (unlistenDone) unlistenDone();
+    unlistenDone = await listen<string>(`run-done-${id}`, (event) => {
+      isRunning.value = false;
+      if (event.payload === 'done') {
+        if (currentStepIndex.value > 0) stepStatus.value[currentStepIndex.value] = 'finish';
+      } else {
+        if (currentStepIndex.value > 0) stepStatus.value[currentStepIndex.value] = 'error';
+      }
+    });
+
+    // Fire and forget — streaming happens via events
+    invoke('run_ccg_command', {
+      runId: id,
+      workspacePath: ws.path,
+      skill,
+      prompt: workflowPrompt.value
+    }).catch((e: any) => {
+      logs.value.push(`[错误] ${e}`);
+      isRunning.value = false;
+      if (currentStepIndex.value > 0) stepStatus.value[currentStepIndex.value] = 'error';
+    });
+
   } catch (e: any) {
-    console.error(`Step ${idx} failed`, e);
-    stepStatus.value[idx] = 'error';
-  } finally {
-    isLoading.value = false;
+    console.error('Start failed', e);
+    isRunning.value = false;
   }
 }
 
-async function nextStep() {
-  if (currentStepIndex.value < 6) {
-    currentStepIndex.value++;
-    // Auto-start the next step immediately for now. We can add manual confirmation later.
-    await executeCurrentStep(); 
-  }
-}
-
-async function retryStep() {
-  logs.value = [...logs.value, `[Sys] Retrying Step ${currentStepIndex.value}...`];
-  await executeCurrentStep();
+function resetWorkflow() {
+  runId.value = null;
+  isRunning.value = false;
+  logs.value = [];
+  currentStepIndex.value = 0;
+  stepStatus.value = { 1: 'wait', 2: 'wait', 3: 'wait', 4: 'wait', 5: 'wait', 6: 'wait' };
 }
 
 onUnmounted(() => {
   if (unlistenLog) unlistenLog();
-  if (unlistenUpdate) unlistenUpdate();
+  if (unlistenDone) unlistenDone();
 });
 </script>
 
@@ -136,7 +133,7 @@ onUnmounted(() => {
     <n-alert v-if="!workspaceStore.currentWorkspaceId" type="warning">
       请先在左侧边栏选择或创建一个项目 (Workspace) 以启动工作流。
     </n-alert>
-    
+
     <!-- Hero / Input Section -->
     <n-card style="border-radius: 12px; background: linear-gradient(135deg, #18181c 0%, #1a2332 100%); flex-shrink: 0;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
@@ -155,33 +152,35 @@ onUnmounted(() => {
         placeholder="输入你的需求，例如：帮我写一个基于 Vue3 的 Todo 列表页面，支持本地存储..."
         :autosize="{ minRows: 2, maxRows: 5 }"
         style="border-radius: 8px; font-size: 13px; background: rgba(0, 0, 0, 0.2); margin-bottom: 16px;"
-        :disabled="runId !== null"
+        :disabled="isRunning"
       />
 
-      <div v-if="!runId" style="display: flex; flex-wrap: wrap; gap: 10px;">
-        <n-button type="info" size="medium" style="border-radius: 8px; font-weight: 600;" :disabled="!workflowPrompt.trim()" @click="startWorkflow('full')">
+      <div v-if="!isRunning" style="display: flex; flex-wrap: wrap; gap: 10px;">
+        <n-button type="info" size="medium" style="border-radius: 8px; font-weight: 600;" :disabled="!workflowPrompt.trim() || !workspaceStore.currentWorkspace" @click="startWorkflow('ccg:workflow')">
           <template #icon><n-icon><RocketOutline /></n-icon></template> 完整工作流
         </n-button>
-        <n-button type="success" secondary size="medium" style="border-radius: 8px; font-weight: 600;" :disabled="!workflowPrompt.trim()" @click="startWorkflow('frontend')">
+        <n-button type="success" secondary size="medium" style="border-radius: 8px; font-weight: 600;" :disabled="!workflowPrompt.trim() || !workspaceStore.currentWorkspace" @click="startWorkflow('ccg:frontend')">
           极速前端 (Gemini)
         </n-button>
-        <n-button type="warning" secondary size="medium" style="border-radius: 8px; font-weight: 600;" :disabled="!workflowPrompt.trim()" @click="startWorkflow('backend')">
+        <n-button type="warning" secondary size="medium" style="border-radius: 8px; font-weight: 600;" :disabled="!workflowPrompt.trim() || !workspaceStore.currentWorkspace" @click="startWorkflow('ccg:backend')">
           极速后端 (Codex)
         </n-button>
       </div>
-      <div v-else>
-        <n-button type="error" ghost size="medium" style="border-radius: 8px;" @click="runId = null">
+      <div v-else style="display: flex; align-items: center; gap: 12px;">
+        <n-spin :size="16" />
+        <span style="color: #888; font-size: 13px;">Claude 正在执行工作流，请在日志区查看实时输出...</span>
+        <n-button type="error" ghost size="medium" style="border-radius: 8px; margin-left: auto;" @click="resetWorkflow">
           中止并重置
         </n-button>
       </div>
     </n-card>
 
-    <!-- Orchestrator View (Shown only when running) -->
+    <!-- Step Indicator + Logs (always visible once runId set) -->
     <div v-if="runId" style="display: flex; flex: 1; min-height: 0; gap: 16px;">
-      
+
       <!-- Left: Step Indicator -->
-      <n-card style="width: 240px; border-radius: 12px; flex-shrink: 0;" :content-style="{ padding: '16px' }">
-        <n-steps vertical :current="currentStepIndex" :status="stepStatus[currentStepIndex]">
+      <n-card style="width: 200px; border-radius: 12px; flex-shrink: 0;" :content-style="{ padding: '16px' }">
+        <n-steps vertical :current="currentStepIndex" size="small">
           <n-step
             v-for="(step, i) in workflowSteps"
             :key="i"
@@ -192,74 +191,27 @@ onUnmounted(() => {
         </n-steps>
       </n-card>
 
-      <!-- Right: Main Content -->
-      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0; gap: 16px;">
-        
-        <!-- Result / Action Card -->
-        <n-card style="border-radius: 12px; flex-shrink: 0;">
-          <template #header>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <n-icon :size="20" color="#58a6ff"><component :is="workflowSteps[currentStepIndex-1].icon" /></n-icon>
-              <span>{{ workflowSteps[currentStepIndex-1].title }}</span>
-              <n-spin v-if="isLoading" :size="16" style="margin-left: 8px;" />
-              <n-tag v-else-if="stepStatus[currentStepIndex] === 'finish'" type="success" size="small" style="margin-left: 8px;">已完成</n-tag>
-              <n-tag v-else-if="stepStatus[currentStepIndex] === 'error'" type="error" size="small" style="margin-left: 8px;">失败</n-tag>
-            </div>
-          </template>
-
-          <div v-if="isLoading" style="color: #888; padding: 20px 0; text-align: center;">
-            <n-spin size="large" />
-            <div style="margin-top: 12px;">Claude 正在后台执行，请稍候...</div>
+      <!-- Right: Logs -->
+      <n-card style="flex: 1; border-radius: 12px; background: #0d1117; border: 1px solid #30363d; display: flex; flex-direction: column; min-width: 0;" :content-style="{ padding: '12px', display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' }">
+        <div style="font-size: 11px; color: #484f58; margin-bottom: 8px; font-family: monospace;">实时日志输出 — {{ workspaceStore.currentWorkspace?.path }}</div>
+        <n-scrollbar style="flex: 1;">
+          <div v-for="(log, idx) in logs" :key="idx"
+            :style="{
+              fontFamily: 'Cascadia Code, Consolas, monospace',
+              fontSize: '12px',
+              lineHeight: '1.6',
+              whiteSpace: 'pre-wrap',
+              color: log.startsWith('[stderr]') ? '#f85149' : log.includes('[模式') ? '#58a6ff' : '#c9d1d9',
+              padding: '1px 0'
+            }">
+            {{ log }}
           </div>
-          
-          <div v-else-if="stepStatus[currentStepIndex] === 'finish'">
-            <n-alert type="success" :show-icon="false" style="margin-bottom: 16px; background: rgba(63, 185, 80, 0.1); border: 1px solid rgba(63, 185, 80, 0.2);">
-              <pre style="margin: 0; white-space: pre-wrap; font-family: 'Cascadia Code', monospace; font-size: 13px; color: #c9d1d9;">{{ stepResults[currentStepIndex] || '执行成功，暂无输出摘要。' }}</pre>
-            </n-alert>
-            <div style="display: flex; gap: 12px;">
-              <n-button type="primary" @click="nextStep" v-if="currentStepIndex < 6">
-                <template #icon><n-icon><PlayOutline/></n-icon></template> 继续下一步
-              </n-button>
-              <n-button type="success" v-else>
-                <template #icon><n-icon><CheckmarkDoneOutline/></n-icon></template> 完成工作流
-              </n-button>
-              <n-button ghost @click="retryStep">
-                <template #icon><n-icon><RefreshOutline/></n-icon></template> 重新执行
-              </n-button>
-            </div>
-          </div>
-
-          <div v-else-if="stepStatus[currentStepIndex] === 'error'">
-            <n-alert type="error" style="margin-bottom: 16px;">
-              执行过程中发生错误，请查看下方控制台日志。
-            </n-alert>
-            <n-button type="warning" @click="retryStep">
-              <template #icon><n-icon><RefreshOutline/></n-icon></template> 重试此步骤
-            </n-button>
-          </div>
-        </n-card>
-
-        <!-- Logs Accordion -->
-        <n-collapse default-expanded-names="logs" style="background: #0d1117; border-radius: 12px; border: 1px solid #30363d; flex: 1; display: flex; flex-direction: column;">
-          <n-collapse-item title="原始控制台日志 (Raw Output)" name="logs" style="display: flex; flex-direction: column; flex: 1;">
-            <n-scrollbar style="max-height: 300px; padding: 12px; background: #0d1117; border-radius: 8px;">
-              <div v-for="(log, idx) in logs" :key="idx" style="font-family: 'Cascadia Code', monospace; font-size: 12px; color: #8b949e; line-height: 1.5; white-space: pre-wrap;">
-                {{ log }}
-              </div>
-              <div v-if="logs.length === 0" style="color: #484f58; text-align: center; font-style: italic;">暂无日志输出...</div>
-            </n-scrollbar>
-          </n-collapse-item>
-        </n-collapse>
-        
-      </div>
+          <div v-if="logs.length === 0" style="color: #484f58; text-align: center; font-style: italic; padding: 20px;">等待 Claude 输出...</div>
+        </n-scrollbar>
+      </n-card>
     </div>
   </div>
 </template>
 
 <style scoped>
-:deep(.n-collapse-item__content-inner) {
-  padding: 0 !important;
-  display: flex;
-  flex-direction: column;
-}
 </style>
