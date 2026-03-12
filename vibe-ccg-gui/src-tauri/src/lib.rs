@@ -11,6 +11,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 pub mod db;
+pub mod pty;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Workspace {
@@ -68,6 +69,8 @@ async fn start_workflow(
     app: AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
+    mode: String,
+    prompt: String,
 ) -> Result<String, String> {
     {
         let processes = state.active_processes.lock().await;
@@ -100,9 +103,23 @@ async fn start_workflow(
     let run_id_clone = run_id.clone();
     let workspace_id_clone = workspace_id.clone();
     let workspace_path = workspace.path.clone();
+    let mode_clone = mode.clone();
+    let prompt_clone = prompt.clone();
 
     tokio::spawn(async move {
+        // Prepare the actual command to be executed
         let mut cmd = AsyncCommand::new("ccg-workflow");
+        
+        // Map mode to appropriate CCG tool (this is placeholder logic; customize based on CCG docs)
+        let ccg_cmd = match mode_clone.as_str() {
+            "full" => "/ccg:workflow",
+            "frontend" => "/ccg:frontend",
+            "backend" => "/ccg:backend",
+            "codex-exec" => "/ccg:codex-exec",
+            _ => "/ccg:workflow",
+        };
+        cmd.arg(ccg_cmd).arg(&prompt_clone);
+
         cmd.current_dir(&workspace_path)
            .stdout(Stdio::piped())
            .stderr(Stdio::piped());
@@ -117,9 +134,9 @@ async fn start_workflow(
                 mock_cmd.arg(if cfg!(windows) { "/C" } else { "-c" });
                 
                 let mock_script = if cfg!(windows) {
-                    "echo Starting vibe-ccg workflow for local project... && timeout 2 > NUL && echo Scanning AST and resolving dependencies... && timeout 2 > NUL && echo Building phase complete. Success!"
+                    format!("echo Starting vibe-ccg [{}] workflow for local project... && echo PROMPT: {} && timeout 2 > NUL && echo Scanning AST and resolving dependencies... && timeout 2 > NUL && echo Building phase complete. Success!", ccg_cmd, prompt_clone)
                 } else {
-                    "echo Starting vibe-ccg workflow for local project... && sleep 2 && echo Scanning AST and resolving dependencies... && sleep 2 && echo Building phase complete. Success!"
+                    format!("echo Starting vibe-ccg [{}] workflow for local project... && echo PROMPT: {} && sleep 2 && echo Scanning AST and resolving dependencies... && sleep 2 && echo Building phase complete. Success!", ccg_cmd, prompt_clone)
                 };
                 
                 mock_cmd.arg(mock_script);
@@ -210,12 +227,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().add_migrations("sqlite:vibe-ccg.db", migrations).build())
+        .manage(Arc::new(std::sync::Mutex::new(pty::PtyState::default())))
         .invoke_handler(tauri::generate_handler![
             greet, 
             get_workspaces, 
             add_workspace, 
             get_workflow_runs,
-            start_workflow
+            start_workflow,
+            pty::spawn_pty,
+            pty::write_to_pty,
+            pty::resize_pty
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

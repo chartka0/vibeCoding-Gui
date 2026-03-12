@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../store/workspace";
 import Sidebar from "../components/layout/Sidebar.vue";
 import Header from "../components/layout/Header.vue";
 import WorkflowPanel from "../components/panels/WorkflowPanel.vue";
+import CodexExecPanel from "../components/panels/CodexExecPanel.vue";
 import PlanPanel from "../components/panels/PlanPanel.vue";
 import BuildPanel from "../components/panels/BuildPanel.vue";
 import ReviewPanel from "../components/panels/ReviewPanel.vue";
@@ -33,6 +34,7 @@ const selectedKey = ref('workflow');
 
 const panelTitles: Record<string, { title: string; subtitle?: string }> = {
   workflow: { title: '完整工作流', subtitle: '/ccg:workflow' },
+  'codex-exec': { title: 'Codex 全权执行', subtitle: '/ccg:codex-exec' },
   plan: { title: '规划面板', subtitle: '/ccg:plan' },
   build: { title: '构建监控', subtitle: '/ccg:execute' },
   review: { title: '代码审查', subtitle: '/ccg:review' },
@@ -63,6 +65,7 @@ function handleBack() {
       <Header :title="currentPanel.title" :subtitle="currentPanel.subtitle" />
       <n-layout-content style="padding: 20px; background: #101014;" :native-scrollbar="false">
         <WorkflowPanel v-if="selectedKey === 'workflow'" />
+        <CodexExecPanel v-else-if="selectedKey === 'codex-exec'" />
         <PlanPanel v-else-if="selectedKey === 'plan'" />
         <BuildPanel v-else-if="selectedKey === 'build'" />
         <ReviewPanel v-else-if="selectedKey === 'review'" />
