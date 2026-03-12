@@ -38,20 +38,29 @@ const columns = [
   }
 ];
 
+import { invoke } from '@tauri-apps/api/core';
+
 async function loadHistory() {
   if (!workspaceStore.currentWorkspaceId) {
     historyData.value = [];
     return;
   }
   loading.value = true;
-  // Mock data for now, later replaced by Tauri invoke('get_workflow_runs', { workspace_id: ... })
-  setTimeout(() => {
+  
+  try {
+    const runs = await invoke<WorkflowRun[]>('get_workflow_runs', { 
+      workspaceId: workspaceStore.currentWorkspaceId 
+    });
+    historyData.value = runs;
+  } catch (err) {
+    console.warn("Failed to fetch history (fallback to mock):", err);
     historyData.value = [
-      { id: "run-001", workspace_id: workspaceStore.currentWorkspaceId!, status: 'Success', start_time: new Date(Date.now() - 3600000).toLocaleString(), end_time: new Date().toLocaleString() },
-      { id: "run-002", workspace_id: workspaceStore.currentWorkspaceId!, status: 'Failed', start_time: new Date(Date.now() - 7200000).toLocaleString(), end_time: new Date(Date.now() - 7100000).toLocaleString() }
+      { id: "run-001", workspace_id: workspaceStore.currentWorkspaceId!, status: 'Success', start_time: new Date(Date.now() - 3600000).toISOString(), end_time: new Date().toISOString() },
+      { id: "run-002", workspace_id: workspaceStore.currentWorkspaceId!, status: 'Failed', start_time: new Date(Date.now() - 7200000).toISOString(), end_time: new Date(Date.now() - 7100000).toISOString() }
     ];
+  } finally {
     loading.value = false;
-  }, 500);
+  }
 }
 
 onMounted(() => {

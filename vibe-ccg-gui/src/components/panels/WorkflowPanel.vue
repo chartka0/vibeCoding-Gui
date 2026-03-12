@@ -7,12 +7,19 @@ import {
 import {
   RocketOutline, DocumentTextOutline, ChatbubblesOutline,
   CodeSlashOutline, GitBranchOutline, CheckmarkDoneOutline,
-  FlashOutline, BrowsersOutline, FolderOpenOutline
+  FlashOutline, BrowsersOutline, FolderOpenOutline, RefreshOutline
 } from "@vicons/ionicons5";
 import { useWorkspaceStore } from "../../store/workspace";
+import { invoke } from '@tauri-apps/api/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 
 const currentStep = ref(0);
 const workspaceStore = useWorkspaceStore();
+
+const isRunning = ref(false);
+const logs = ref<string[]>([]);
+let unlistenLog: UnlistenFn | null = null;
+let unlistenDone: UnlistenFn | null = null;
 
 const workflowSteps = [
   { title: '需求收集', desc: '输入文字描述或上传设计草图', icon: DocumentTextOutline },
@@ -23,12 +30,44 @@ const workflowSteps = [
   { title: '交付存档', desc: '自动生成 Commit，版本沉淀', icon: CheckmarkDoneOutline },
 ];
 
-function startWorkflow() {
-  if (!workspaceStore.currentWorkspaceId) {
-    // Notify or block execution
-    return;
+async function startWorkflow() {
+  const currentId = workspaceStore.currentWorkspaceId;
+  if (!currentId) return;
+
+  isRunning.value = true;
+  logs.value = [];
+  logs.value.push("初始化工作流环境...");
+  currentStep.value = 1;
+
+  try {
+    // Setup event listeners for this specific workspace execution
+    unlistenLog = await listen<{ line: string }>(`workflow-log-${currentId}`, (event) => {
+      logs.value.push(event.payload.line);
+      // Rough simulation of progress steps based on log volume or content
+      if (logs.value.length > 5 && currentStep.value < 3) currentStep.value = 3;
+    });
+
+    unlistenDone = await listen(`workflow-done-${currentId}`, () => {
+      isRunning.value = false;
+      currentStep.value = 6;
+      cleanupListeners();
+    });
+
+    // Invoke Rust process spawn
+    await invoke('start_workflow', { workspaceId: currentId });
+    logs.value.push("后端子进程已分发...");
+
+  } catch (err) {
+    console.error("Workflow trigger failed:", err);
+    logs.value.push(`[ERROR] 工作流启动失败: ${err}`);
+    isRunning.value = false;
+    cleanupListeners();
   }
-  // Workflow start logic
+}
+
+function cleanupListeners() {
+  if (unlistenLog) { unlistenLog(); unlistenLog = null; }
+  if (unlistenDone) { unlistenDone(); unlistenDone = null; }
 }
 </script>
 
@@ -88,6 +127,18 @@ function startWorkflow() {
           :description="step.desc"
         />
       </n-steps>
+    </n-card>
+
+    <!-- Live Execution Logs -->
+    <n-card v-if="logs.length > 0" title="执行日志 (Execution Logs)" size="medium" style="border-radius: 12px; margin-bottom: 20px;">
+      <div style="background: #000; border-radius: 8px; padding: 16px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 13px; color: #a9b7c6; max-height: 400px; overflow-y: auto;">
+        <div v-for="(log, idx) in logs" :key="idx" style="margin-bottom: 4px; line-height: 1.5;">
+          <span style="color: #629755; margin-right: 8px;">></span> {{ log }}
+        </div>
+        <div v-if="isRunning" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; color: #63e2b7;">
+          <n-icon class="spin"><RefreshOutline /></n-icon> 正在运行后端任务...
+        </div>
+      </div>
     </n-card>
 
     <!-- Quick Actions -->

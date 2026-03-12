@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { NCard, NGradientText, NButton, NIcon, NGrid, NGi, NEmpty, NBadge, NSpace } from 'naive-ui';
+import { NCard, NGradientText, NButton, NIcon, NEmpty, NBadge, NSpace } from 'naive-ui';
 import { AddOutline, FolderOpenOutline, RocketOutline, FlashOutline } from '@vicons/ionicons5';
 import { useWorkspaceStore } from '../store/workspace';
 
@@ -36,29 +36,23 @@ async function openExistingProject() {
     if (selectedPath && typeof selectedPath === 'string') {
       const folderName = selectedPath.split('\\').pop() || selectedPath.split('/').pop() || 'Unknown Project';
       
-      const newWorkspace = {
-        id: crypto.randomUUID(),
-        name: folderName,
-        path: selectedPath,
-        created_at: new Date().toISOString()
-      };
+      const newWorkspace = await workspaceStore.addWorkspace(folderName, selectedPath);
       
-      workspaceStore.workspaces.push(newWorkspace);
-      
-      // Enter the new workspace immediately
-      enterProject(newWorkspace.id);
+      if (newWorkspace) {
+        enterProject(newWorkspace.id);
+      }
     }
   } catch (err) {
     console.error("对话框打开失败(如果在非桌面环境会报错):", err);
     // Mock for browser dev environment
-    const newWorkspace = {
-      id: "mock-" + Date.now(),
+    const mockId = "mock-" + Date.now();
+    workspaceStore.workspaces.unshift({
+      id: mockId,
       name: "Mocked Local Project",
       path: "D:\\WebData\\mocked-project",
       created_at: new Date().toISOString()
-    };
-    workspaceStore.workspaces.push(newWorkspace);
-    enterProject(newWorkspace.id);
+    });
+    enterProject(mockId);
   }
 }
 
@@ -110,25 +104,27 @@ function isRunning(id: string) {
       </n-empty>
     </div>
 
-    <n-grid v-else :x-gap="20" :y-gap="20" :cols="3">
-      <n-gi v-for="ws in workspaceStore.workspaces" :key="ws.id">
-        <n-badge :show="isRunning(ws.id)" dot type="success" :offset="[-10, 10]">
+    <div v-else style="display: flex; flex-wrap: wrap; gap: 24px;">
+      <div v-for="ws in workspaceStore.workspaces" :key="ws.id" style="width: 360px; flex-shrink: 0;">
+        <n-badge :show="isRunning(ws.id)" dot type="success" :offset="[-10, 10]" style="width: 100%; height: 100%;">
           <n-card 
             hoverable 
-            style="border-radius: 12px; cursor: pointer; height: 100%; transition: all 0.2s;"
+            style="border-radius: 12px; cursor: pointer; height: 100%; transition: transform 0.2s, box-shadow 0.2s;"
             @click="enterProject(ws.id)"
           >
             <div style="display: flex; align-items: flex-start; gap: 16px;">
-              <div style="background: rgba(112, 192, 232, 0.1); padding: 12px; border-radius: 10px;">
-                <n-icon :size="24" color="#70c0e8"><FolderOpenOutline /></n-icon>
+              <div style="background: rgba(112, 192, 232, 0.1); padding: 14px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                <n-icon :size="28" color="#70c0e8"><FolderOpenOutline /></n-icon>
               </div>
-              <div style="flex: 1;">
-                <div style="font-size: 18px; font-weight: 600; color: #eee; margin-bottom: 4px;">{{ ws.name }}</div>
-                <div style="font-size: 13px; color: #888; margin-bottom: 12px; word-break: break-all;">
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 16px; font-weight: 600; color: #eee; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  {{ ws.name }}
+                </div>
+                <div style="font-size: 12px; color: #888; margin-bottom: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="ws.path">
                   {{ ws.path }}
                 </div>
                 
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px;">
                   <div style="font-size: 12px; color: #666;">
                     创建于: {{ new Date(ws.created_at).toLocaleDateString() }}
                   </div>
@@ -140,8 +136,8 @@ function isRunning(id: string) {
             </div>
           </n-card>
         </n-badge>
-      </n-gi>
-    </n-grid>
+      </div>
+    </div>
   </div>
 </template>
 

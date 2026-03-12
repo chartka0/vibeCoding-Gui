@@ -24,12 +24,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   // Load all workspaces from DB
   const fetchWorkspaces = async () => {
-    // In actual implementation, we'll invoke the Rust db select command
-    // const data = await invoke<Workspace[]>('get_workspaces');
-    // workspaces.value = data;
-    // if (!currentWorkspaceId.value && data.length > 0) {
-    //   currentWorkspaceId.value = data[0].id;
-    // }
+    try {
+      const data = await invoke<Workspace[]>('get_workspaces');
+      workspaces.value = data;
+    } catch (err) {
+      console.error("Failed to fetch workspaces from Tauri backend:", err);
+      // Fallback or leave as empty if no backend
+    }
+  };
+
+  const addWorkspace = async (name: string, path: string): Promise<Workspace | null> => {
+    try {
+      const newWs = await invoke<Workspace>('add_workspace', { name, path });
+      workspaces.value.unshift(newWs); // Add to top
+      return newWs;
+    } catch (err) {
+      console.error("Failed to add workspace via Tauri", err);
+      return null;
+    }
   };
 
   const currentWorkspace = computed(() => 
@@ -40,6 +52,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workspaces,
     currentWorkspaceId,
     currentWorkspace,
-    fetchWorkspaces
+    fetchWorkspaces,
+    addWorkspace
   };
 });
