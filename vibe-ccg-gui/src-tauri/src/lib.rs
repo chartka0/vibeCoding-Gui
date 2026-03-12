@@ -214,7 +214,8 @@ pub fn run() {
             greet, 
             get_workspaces, 
             add_workspace, 
-            get_workflow_runs
+            get_workflow_runs,
+            start_workflow
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
