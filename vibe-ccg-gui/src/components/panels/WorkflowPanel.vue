@@ -2,15 +2,17 @@
 import { ref } from "vue";
 import {
   NCard, NButton, NIcon, NSteps, NStep, NGrid, NGi,
-  NSpace, NGradientText, NTag, NStatistic
+  NGradientText, NTag, NStatistic, NAlert
 } from "naive-ui";
 import {
   RocketOutline, DocumentTextOutline, ChatbubblesOutline,
   CodeSlashOutline, GitBranchOutline, CheckmarkDoneOutline,
-  FlashOutline, BrowsersOutline
+  FlashOutline, BrowsersOutline, FolderOpenOutline
 } from "@vicons/ionicons5";
+import { useWorkspaceStore } from "../../store/workspace";
 
 const currentStep = ref(0);
+const workspaceStore = useWorkspaceStore();
 
 const workflowSteps = [
   { title: '需求收集', desc: '输入文字描述或上传设计草图', icon: DocumentTextOutline },
@@ -20,10 +22,22 @@ const workflowSteps = [
   { title: '审查修复', desc: 'Claude 交叉审查，自愈修复', icon: GitBranchOutline },
   { title: '交付存档', desc: '自动生成 Commit，版本沉淀', icon: CheckmarkDoneOutline },
 ];
+
+function startWorkflow() {
+  if (!workspaceStore.currentWorkspaceId) {
+    // Notify or block execution
+    return;
+  }
+  // Workflow start logic
+}
 </script>
 
 <template>
   <div>
+    <n-alert v-if="!workspaceStore.currentWorkspaceId" type="warning" style="margin-bottom: 20px;">
+      请先在左侧边栏选择或创建一个项目 (Workspace) 以启动工作流。
+    </n-alert>
+    
     <!-- Hero Section -->
     <n-card style="border-radius: 12px; margin-bottom: 20px; background: linear-gradient(135deg, #18181c 0%, #1a2332 100%);">
       <div style="text-align: center; padding: 30px 0 20px;">
@@ -33,7 +47,20 @@ const workflowSteps = [
         <p style="color: #888; margin: 10px 0 24px; font-size: 14px;">
           Claude + Codex + Gemini 三模型协作，从需求到交付的全自动化闭环
         </p>
-        <n-button type="info" size="large" round style="padding: 0 40px; font-size: 16px; height: 48px;">
+        <div v-if="workspaceStore.currentWorkspace" style="margin-bottom: 20px;">
+          <n-tag type="success" size="medium" round>
+            <template #icon><n-icon><FolderOpenOutline/></n-icon></template>
+            当前项目: {{ workspaceStore.currentWorkspace.name }}
+          </n-tag>
+        </div>
+        <n-button 
+          type="info" 
+          size="large" 
+          round 
+          style="padding: 0 40px; font-size: 16px; height: 48px;"
+          :disabled="!workspaceStore.currentWorkspaceId"
+          @click="startWorkflow"
+        >
           <template #icon><n-icon :size="20"><RocketOutline /></n-icon></template>
           启动完整心流
         </n-button>

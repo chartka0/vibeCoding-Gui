@@ -1,0 +1,154 @@
+<script setup lang="ts">
+import { onMounted } from 'vue';
+import { NCard, NGradientText, NButton, NIcon, NGrid, NGi, NEmpty, NBadge, NSpace } from 'naive-ui';
+import { AddOutline, FolderOpenOutline, RocketOutline, FlashOutline } from '@vicons/ionicons5';
+import { useWorkspaceStore } from '../store/workspace';
+
+import { open } from '@tauri-apps/plugin-dialog';
+
+const workspaceStore = useWorkspaceStore();
+
+const emit = defineEmits<{
+  (e: 'enter-workspace', id: string): void
+}>();
+
+onMounted(() => {
+  workspaceStore.fetchWorkspaces();
+});
+
+function enterProject(id: string) {
+  workspaceStore.currentWorkspaceId = id;
+  emit('enter-workspace', id);
+}
+
+function createProject() {
+  // To be implemented: open a modal to create a new workspace
+}
+
+async function openExistingProject() {
+  try {
+    const selectedPath = await open({
+      title: '选择已有项目文件夹',
+      directory: true,
+      multiple: false
+    });
+    
+    if (selectedPath && typeof selectedPath === 'string') {
+      const folderName = selectedPath.split('\\').pop() || selectedPath.split('/').pop() || 'Unknown Project';
+      
+      const newWorkspace = {
+        id: crypto.randomUUID(),
+        name: folderName,
+        path: selectedPath,
+        created_at: new Date().toISOString()
+      };
+      
+      workspaceStore.workspaces.push(newWorkspace);
+      
+      // Enter the new workspace immediately
+      enterProject(newWorkspace.id);
+    }
+  } catch (err) {
+    console.error("对话框打开失败(如果在非桌面环境会报错):", err);
+    // Mock for browser dev environment
+    const newWorkspace = {
+      id: "mock-" + Date.now(),
+      name: "Mocked Local Project",
+      path: "D:\\WebData\\mocked-project",
+      created_at: new Date().toISOString()
+    };
+    workspaceStore.workspaces.push(newWorkspace);
+    enterProject(newWorkspace.id);
+  }
+}
+
+// Temporary mock to show a "running" project indicator
+function isRunning(id: string) {
+  return id === 'mock-id-1'; // Mock
+}
+</script>
+
+<template>
+  <div style="padding: 40px; max-width: 1200px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+      <div>
+        <n-gradient-text type="info" :size="32" style="font-weight: 800; display: flex; align-items: center; gap: 12px;">
+          <n-icon :size="28"><RocketOutline/></n-icon> vibeCoding
+        </n-gradient-text>
+        <div style="color: #888; margin-top: 8px;">选择一个项目进入心流，或者创建新项目</div>
+      </div>
+      
+      <n-space>
+        <n-button type="default" size="large" @click="openExistingProject">
+          <template #icon><n-icon><FolderOpenOutline /></n-icon></template>
+          打开本地项目
+        </n-button>
+        <n-button type="info" size="large" @click="createProject">
+          <template #icon><n-icon><AddOutline /></n-icon></template>
+          新建项目
+        </n-button>
+      </n-space>
+    </div>
+
+    <div v-if="workspaceStore.workspaces.length === 0" style="padding: 60px 0;">
+      <n-empty description="暂无项目记录。请打开本地已有项目或新建一个项目。">
+        <template #icon>
+          <n-icon><FolderOpenOutline /></n-icon>
+        </template>
+        <template #extra>
+          <n-space style="margin-top: 16px;">
+            <n-button type="default" @click="openExistingProject">
+              <template #icon><n-icon><FolderOpenOutline /></n-icon></template>
+              打开已有项目
+            </n-button>
+            <n-button type="info" @click="createProject">
+              <template #icon><n-icon><AddOutline /></n-icon></template>
+              创建新项目
+            </n-button>
+          </n-space>
+        </template>
+      </n-empty>
+    </div>
+
+    <n-grid v-else :x-gap="20" :y-gap="20" :cols="3">
+      <n-gi v-for="ws in workspaceStore.workspaces" :key="ws.id">
+        <n-badge :show="isRunning(ws.id)" dot type="success" :offset="[-10, 10]">
+          <n-card 
+            hoverable 
+            style="border-radius: 12px; cursor: pointer; height: 100%; transition: all 0.2s;"
+            @click="enterProject(ws.id)"
+          >
+            <div style="display: flex; align-items: flex-start; gap: 16px;">
+              <div style="background: rgba(112, 192, 232, 0.1); padding: 12px; border-radius: 10px;">
+                <n-icon :size="24" color="#70c0e8"><FolderOpenOutline /></n-icon>
+              </div>
+              <div style="flex: 1;">
+                <div style="font-size: 18px; font-weight: 600; color: #eee; margin-bottom: 4px;">{{ ws.name }}</div>
+                <div style="font-size: 13px; color: #888; margin-bottom: 12px; word-break: break-all;">
+                  {{ ws.path }}
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div style="font-size: 12px; color: #666;">
+                    创建于: {{ new Date(ws.created_at).toLocaleDateString() }}
+                  </div>
+                  <div v-if="isRunning(ws.id)" style="display: flex; align-items: center; gap: 4px; color: #63e2b7; font-size: 12px;">
+                    <n-icon><FlashOutline /></n-icon> 运行中
+                  </div>
+                </div>
+              </div>
+            </div>
+          </n-card>
+        </n-badge>
+      </n-gi>
+    </n-grid>
+  </div>
+</template>
+
+<style scoped>
+.n-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2) !important;
+  border-color: #70c0e8;
+}
+</style>

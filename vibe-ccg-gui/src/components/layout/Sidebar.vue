@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { h } from "vue";
-import { NLayoutSider, NGradientText, NIcon, NMenu } from "naive-ui";
+import { NLayoutSider, NGradientText, NIcon, NMenu, NButton } from "naive-ui";
 import type { MenuOption, MenuGroupOption } from "naive-ui";
 import {
-  RocketOutline, PlayOutline, BugOutline,
-  GitCommitOutline, SettingsOutline, TerminalOutline,
+  RocketOutline, BugOutline,
+  GitCommitOutline, SettingsOutline,
   FlashOutline, CodeSlashOutline, SearchOutline,
   CheckmarkCircleOutline, ShieldCheckmarkOutline,
-  TimerOutline, GitBranchOutline
+  TimerOutline, TimeOutline, ArrowBackOutline
 } from "@vicons/ionicons5";
 
 const props = defineProps<{
@@ -15,7 +15,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:selectedKey', key: string): void
+  (e: 'update:selectedKey', key: string): void;
+  (e: 'back-to-overview'): void;
 }>();
 
 function renderIcon(icon: any) {
@@ -31,6 +32,7 @@ const menuOptions: (MenuOption | MenuGroupOption)[] = [
       { label: "完整心流", key: "workflow", icon: renderIcon(RocketOutline) },
       { label: "规划面板", key: "plan", icon: renderIcon(SearchOutline) },
       { label: "构建监控", key: "build", icon: renderIcon(FlashOutline) },
+      { label: "执行历史", key: "history", icon: renderIcon(TimeOutline) },
     ]
   },
   {
@@ -81,7 +83,17 @@ function handleUpdateValue(key: string) {
       <n-gradient-text type="info" :size="22" style="font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px;">
         <n-icon :size="20"><RocketOutline/></n-icon> vibeCoding
       </n-gradient-text>
-      <div style="font-size: 11px; color: #666; margin-top: 4px; letter-spacing: 0.5px;">CCG Workflow Engine</div>
+      <div style="font-size: 11px; color: #666; margin-top: 4px; margin-bottom: 12px; letter-spacing: 0.5px;">CCG Workflow Engine</div>
+      <n-button
+        size="small"
+        quaternary
+        type="info"
+        style="width: 100%; justify-content: flex-start;"
+        @click="emit('back-to-overview')"
+      >
+        <template #icon><n-icon><ArrowBackOutline/></n-icon></template>
+        返回工作区总览
+      </n-button>
     </div>
     <n-menu
       :value="selectedKey"
