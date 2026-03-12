@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
+use tauri::Manager;
 use crate::{Workspace, WorkflowRun};
 
 // Helper function to get the database path
