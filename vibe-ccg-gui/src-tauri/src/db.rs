@@ -67,15 +67,17 @@ pub fn create_workflow_run(app_handle: &tauri::AppHandle, run: &WorkflowRun) -> 
 
 pub fn get_workflow_runs(app_handle: &tauri::AppHandle, workspace_id: &str) -> Result<Vec<WorkflowRun>> {
     let conn = get_connection(app_handle)?;
-    let mut stmt = conn.prepare("SELECT id, workspace_id, status, logs_path, start_time, end_time FROM workflow_runs WHERE workspace_id = ?1 ORDER BY start_time DESC")?;
+    let mut stmt = conn.prepare("SELECT id, workspace_id, status, mode, prompt, logs_path, start_time, end_time FROM workflow_runs WHERE workspace_id = ?1 ORDER BY start_time DESC")?;
     let run_iter = stmt.query_map(params![workspace_id], |row| {
         Ok(WorkflowRun {
             id: row.get(0)?,
             workspace_id: row.get(1)?,
             status: row.get(2)?,
-            logs_path: row.get(3)?,
-            start_time: row.get(4)?,
-            end_time: row.get(5)?,
+            mode: row.get(3)?,
+            prompt: row.get(4)?,
+            logs_path: row.get(5)?,
+            start_time: row.get(6)?,
+            end_time: row.get(7)?,
         })
     })?;
 

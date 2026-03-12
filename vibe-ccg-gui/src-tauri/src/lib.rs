@@ -1,5 +1,4 @@
 use tauri::{AppHandle, State, Emitter};
-use tauri_plugin_sql::{Migration, MigrationKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +10,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 pub mod db;
-pub mod pty;
+pub mod orchestrator;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Workspace {
@@ -26,14 +25,15 @@ pub struct WorkflowRun {
     pub id: String,
     pub workspace_id: String,
     pub status: String,
+    pub mode: Option<String>,
+    pub prompt: Option<String>,
     pub logs_path: Option<String>,
     pub start_time: Option<String>,
     pub end_time: Option<String>,
 }
 
-// Global App State to hold active processes
+// Global App State
 pub struct AppState {
-    // workspace_id -> Process Handle (or just status for now)
     pub active_processes: Arc<Mutex<HashMap<String, bool>>>,
 }
 
@@ -65,130 +65,6 @@ fn get_workflow_runs(app: tauri::AppHandle, workspace_id: String) -> Result<Vec<
 }
 
 #[tauri::command]
-async fn start_workflow(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    workspace_id: String,
-    mode: String,
-    prompt: String,
-) -> Result<String, String> {
-    {
-        let processes = state.active_processes.lock().await;
-        if processes.contains_key(&workspace_id) {
-            return Err("A workflow is already running for this workspace".into());
-        }
-    }
-
-    let workspaces = db::get_workspaces(&app).map_err(|e| e.to_string())?;
-    let workspace = workspaces.into_iter().find(|w| w.id == workspace_id).ok_or("Workspace not found")?;
-
-    let run_id = Uuid::new_v4().to_string();
-    let run = WorkflowRun {
-        id: run_id.clone(),
-        workspace_id: workspace_id.clone(),
-        status: "Running".to_string(),
-        logs_path: None,
-        start_time: Some(Utc::now().to_rfc3339()),
-        end_time: None,
-    };
-    db::create_workflow_run(&app, &run).map_err(|e| e.to_string())?;
-
-    {
-        let mut processes = state.active_processes.lock().await;
-        processes.insert(workspace_id.clone(), true);
-    }
-
-    let app_clone = app.clone();
-    let state_clone = state.inner().active_processes.clone();
-    let run_id_clone = run_id.clone();
-    let workspace_id_clone = workspace_id.clone();
-    let workspace_path = workspace.path.clone();
-    let mode_clone = mode.clone();
-    let prompt_clone = prompt.clone();
-
-    tokio::spawn(async move {
-        // Prepare the actual command to be executed
-        let mut cmd = AsyncCommand::new("ccg-workflow");
-        
-        // Map mode to appropriate CCG tool (this is placeholder logic; customize based on CCG docs)
-        let ccg_cmd = match mode_clone.as_str() {
-            "full" => "/ccg:workflow",
-            "frontend" => "/ccg:frontend",
-            "backend" => "/ccg:backend",
-            "codex-exec" => "/ccg:codex-exec",
-            _ => "/ccg:workflow",
-        };
-        cmd.arg(ccg_cmd).arg(&prompt_clone);
-
-        cmd.current_dir(&workspace_path)
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
-
-        let mut child_res = cmd.spawn();
-        
-        // Fallback mock for development if ccg-workflow is not installed
-        if child_res.is_err() {
-            #[cfg(debug_assertions)]
-            {
-                let mut mock_cmd = AsyncCommand::new(if cfg!(windows) { "cmd" } else { "sh" });
-                mock_cmd.arg(if cfg!(windows) { "/C" } else { "-c" });
-                
-                let mock_script = if cfg!(windows) {
-                    format!("echo Starting vibe-ccg [{}] workflow for local project... && echo PROMPT: {} && timeout 2 > NUL && echo Scanning AST and resolving dependencies... && timeout 2 > NUL && echo Building phase complete. Success!", ccg_cmd, prompt_clone)
-                } else {
-                    format!("echo Starting vibe-ccg [{}] workflow for local project... && echo PROMPT: {} && sleep 2 && echo Scanning AST and resolving dependencies... && sleep 2 && echo Building phase complete. Success!", ccg_cmd, prompt_clone)
-                };
-                
-                mock_cmd.arg(mock_script);
-                mock_cmd.current_dir(&workspace_path)
-                        .stdout(Stdio::piped())
-                        .stderr(Stdio::piped());
-                child_res = mock_cmd.spawn();
-            }
-        }
-
-        let mut child = match child_res {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = app_clone.emit(&format!("workflow-log-{}", workspace_id_clone), LogPayload { line: format!("Failed to start process: {}", e) });
-                let _ = db::update_workflow_run_status(&app_clone, &run_id_clone, "Failed", &Utc::now().to_rfc3339(), None);
-                let mut processes = state_clone.lock().await;
-                processes.remove(&workspace_id_clone);
-                return;
-            }
-        };
-
-        if let Some(stdout) = child.stdout.take() {
-            let mut reader = BufReader::new(stdout).lines();
-            let event_name = format!("workflow-log-{}", workspace_id_clone);
-            while let Ok(Some(line)) = reader.next_line().await {
-                // Ignore empty bytes in windows timeout output if any
-                if !line.trim().is_empty() {
-                    let _ = app_clone.emit(&event_name, LogPayload { line });
-                }
-            }
-        }
-
-        let status = child.wait().await;
-        let final_status = match status {
-            Ok(s) if s.success() => "Success",
-            _ => "Failed",
-        };
-
-        let _ = db::update_workflow_run_status(&app_clone, &run_id_clone, final_status, &Utc::now().to_rfc3339(), None);
-
-        let mut processes = state_clone.lock().await;
-        processes.remove(&workspace_id_clone);
-        
-        // Emit completion event
-        let _ = app_clone.emit(&format!("workflow-done-{}", workspace_id_clone), ());
-    });
-
-    Ok(run_id)
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
@@ -209,11 +85,37 @@ pub fn run() {
                 CREATE TABLE IF NOT EXISTS workflow_runs (
                     id TEXT PRIMARY KEY,
                     workspace_id TEXT NOT NULL,
+                    mode TEXT,
+                    prompt TEXT,
                     status TEXT NOT NULL,
                     logs_path TEXT,
                     start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
                     end_time DATETIME,
                     FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+                );
+            ",
+            kind: tauri_plugin_sql::MigrationKind::Up,
+        },
+        tauri_plugin_sql::Migration {
+            version: 2,
+            description: "create_workflow_steps",
+            sql: "
+                CREATE TABLE IF NOT EXISTS workflow_steps (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    step_index INTEGER NOT NULL,
+                    step_name TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    input_prompt TEXT,
+                    output_text TEXT,
+                    output_summary TEXT,
+                    session_id TEXT,
+                    codex_session TEXT,
+                    gemini_session TEXT,
+                    start_time DATETIME,
+                    end_time DATETIME,
+                    error_message TEXT,
+                    FOREIGN KEY (run_id) REFERENCES workflow_runs(id)
                 );
             ",
             kind: tauri_plugin_sql::MigrationKind::Up,
@@ -227,16 +129,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().add_migrations("sqlite:vibe-ccg.db", migrations).build())
-        .manage(Arc::new(std::sync::Mutex::new(pty::PtyState::default())))
         .invoke_handler(tauri::generate_handler![
-            greet, 
-            get_workspaces, 
-            add_workspace, 
+            greet,
+            get_workspaces,
+            add_workspace,
             get_workflow_runs,
-            start_workflow,
-            pty::spawn_pty,
-            pty::write_to_pty,
-            pty::resize_pty
+            orchestrator::start_workflow_run,
+            orchestrator::execute_step,
+            orchestrator::retry_step,
+            orchestrator::get_run_steps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
