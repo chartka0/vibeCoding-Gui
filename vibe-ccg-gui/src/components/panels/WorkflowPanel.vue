@@ -101,7 +101,7 @@ function cleanupListeners() {
           @click="startWorkflow"
         >
           <template #icon><n-icon :size="20"><RocketOutline /></n-icon></template>
-          启动完整心流
+          启动完整工作流
         </n-button>
       </div>
 

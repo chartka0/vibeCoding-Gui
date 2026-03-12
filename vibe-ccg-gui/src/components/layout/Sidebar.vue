@@ -29,7 +29,7 @@ const menuOptions: (MenuOption | MenuGroupOption)[] = [
     label: '工作流',
     key: 'group-workflow',
     children: [
-      { label: "完整心流", key: "workflow", icon: renderIcon(RocketOutline) },
+      { label: "完整工作流", key: "workflow", icon: renderIcon(RocketOutline) },
       { label: "规划面板", key: "plan", icon: renderIcon(SearchOutline) },
       { label: "构建监控", key: "build", icon: renderIcon(FlashOutline) },
       { label: "执行历史", key: "history", icon: renderIcon(TimeOutline) },

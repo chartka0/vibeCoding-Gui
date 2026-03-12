@@ -32,7 +32,7 @@ workspaceStore.currentWorkspaceId = props.workspaceId;
 const selectedKey = ref('workflow');
 
 const panelTitles: Record<string, { title: string; subtitle?: string }> = {
-  workflow: { title: '完整心流', subtitle: '/ccg:workflow' },
+  workflow: { title: '完整工作流', subtitle: '/ccg:workflow' },
   plan: { title: '规划面板', subtitle: '/ccg:plan' },
   build: { title: '构建监控', subtitle: '/ccg:execute' },
   review: { title: '代码审查', subtitle: '/ccg:review' },

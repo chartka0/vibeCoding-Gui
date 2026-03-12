@@ -69,7 +69,7 @@ function isRunning(id: string) {
         <n-gradient-text type="info" :size="32" style="font-weight: 800; display: flex; align-items: center; gap: 12px;">
           <n-icon :size="28"><RocketOutline/></n-icon> vibeCoding
         </n-gradient-text>
-        <div style="color: #888; margin-top: 8px;">选择一个项目进入心流，或者创建新项目</div>
+        <div style="color: #888; margin-top: 8px;">选择一个项目进入工作流，或者创建新项目</div>
       </div>
       
       <n-space>
