@@ -7,7 +7,8 @@ import {
   GitCommitOutline, SettingsOutline,
   FlashOutline, CodeSlashOutline, SearchOutline,
   CheckmarkCircleOutline, ShieldCheckmarkOutline,
-  TimerOutline, TimeOutline, ArrowBackOutline
+  TimerOutline, TimeOutline, ArrowBackOutline,
+  HardwareChipOutline
 } from "@vicons/ionicons5";
 
 const props = defineProps<{
@@ -68,6 +69,7 @@ const menuOptions: (MenuOption | MenuGroupOption)[] = [
     label: '系统',
     key: 'group-system',
     children: [
+      { label: "环境配置", key: "environment", icon: renderIcon(HardwareChipOutline) },
       { label: "设置", key: "settings", icon: renderIcon(SettingsOutline) },
     ]
   }

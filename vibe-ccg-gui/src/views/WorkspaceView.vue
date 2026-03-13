@@ -16,6 +16,7 @@ import SpecPanel from "../components/panels/SpecPanel.vue";
 import CommitPanel from "../components/panels/CommitPanel.vue";
 import RollbackPanel from "../components/panels/RollbackPanel.vue";
 import SettingsPanel from "../components/panels/SettingsPanel.vue";
+import EnvironmentPanel from "../components/panels/EnvironmentPanel.vue";
 import HistoryPanel from "../components/panels/HistoryPanel.vue";
 
 const props = defineProps<{
@@ -45,6 +46,7 @@ const panelTitles: Record<string, { title: string; subtitle?: string }> = {
   rollback: { title: '时光机', subtitle: '/ccg:rollback' },
   history: { title: '执行历史', subtitle: '/ccg:history' },
   settings: { title: '设置' },
+  environment: { title: '环境配置', subtitle: '工具链检测' },
 };
 
 const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: selectedKey.value });
@@ -76,6 +78,7 @@ function handleBack() {
         <RollbackPanel v-else-if="selectedKey === 'rollback'" />
         <HistoryPanel v-else-if="selectedKey === 'history'" />
         <SettingsPanel v-else-if="selectedKey === 'settings'" />
+        <EnvironmentPanel v-else-if="selectedKey === 'environment'" />
         <div v-else style="display:flex; justify-content:center; align-items:center; height: 100%; color: #555; font-size: 14px;">
           模块开发中...
         </div>

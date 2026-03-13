@@ -10,6 +10,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 pub mod db;
+pub mod environment;
 pub mod orchestrator;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -139,6 +140,7 @@ pub fn run() {
             orchestrator::retry_step,
             orchestrator::get_run_steps,
             orchestrator::run_ccg_command,
+            environment::check_environment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
