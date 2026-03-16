@@ -140,6 +140,7 @@ pub fn run() {
             orchestrator::retry_step,
             orchestrator::get_run_steps,
             orchestrator::run_ccg_command,
+            orchestrator::run_workflow_step,
             environment::check_environment,
         ])
         .run(tauri::generate_context!())

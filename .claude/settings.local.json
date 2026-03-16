@@ -38,7 +38,14 @@
       "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_OwningProcess -Force -ErrorAction SilentlyContinue }\")",
       "Bash(netstat -ano)",
       "Bash(findstr :1420)",
-      "Bash(dir D:/WebData/vibeCoding/vibe-ccg-gui/src-tauri/capabilities)"
+      "Bash(dir D:/WebData/vibeCoding/vibe-ccg-gui/src-tauri/capabilities)",
+      "Bash(git add vibe-ccg-gui/src/views/Overview.vue vibe-ccg-gui/src-tauri/capabilities/default.json)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(overview\\): 实现真实项目目录管理\n\n- 删除「新建项目」按钮及相关逻辑\n- 打开本地项目使用 Tauri dialog 选择真实目录并存入 SQLite\n- 卡片底部新增「在资源管理器中打开」小按钮（openPath）\n- 配置 capabilities/default.json 添加 dialog:allow-open 权限\n- 清除 Mock 数据和 catch 块假数据\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(where claude)",
+      "Bash(where codex)",
+      "Bash(where gemini)",
+      "Bash(where opsx)",
+      "Bash(cd:*)"
     ]
   }
 }

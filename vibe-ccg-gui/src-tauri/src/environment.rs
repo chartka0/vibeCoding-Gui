@@ -182,42 +182,48 @@ async fn detect_tool_inner(spec: ToolSpec) -> ToolCheckResult {
     let mut error: Option<String> = None;
     let mut used_source = source.clone();
 
-    // Try running --version with each candidate name via cmd /C
-    for &candidate in spec.candidates {
-        match run_version(candidate, spec.version_args).await {
-            Ok(ver) => {
-                version = Some(ver);
-                status = "installed".to_string();
-                if used_source.is_none() {
-                    used_source = Some("version".to_string());
-                }
-                break;
+    // 1. If `where` found a full path, try it first (most reliable)
+    if let Some(path) = resolved_path.as_deref() {
+        let paths_to_try: Vec<String> = if cfg!(windows) {
+            let mut v = Vec::new();
+            // On Windows, prefer .cmd variant if the path has no extension
+            if !path.ends_with(".cmd") && !path.ends_with(".exe") {
+                v.push(format!("{}.cmd", path));
             }
-            Err(e) => {
-                error = Some(e);
+            v.push(path.to_string());
+            v
+        } else {
+            vec![path.to_string()]
+        };
+
+        for p in &paths_to_try {
+            match run_version(p, spec.version_args).await {
+                Ok(ver) => {
+                    version = Some(ver);
+                    status = "installed".to_string();
+                    used_source = Some("where".to_string());
+                    break;
+                }
+                Err(e) => {
+                    error = Some(e);
+                }
             }
         }
     }
 
-    // If still not found but we have a resolved path, try with the .cmd variant
+    // 2. Fall back to bare candidate names (relies on PATH)
     if version.is_none() {
-        if let Some(path) = resolved_path.as_deref() {
-            // On Windows, prefer the .cmd variant if it exists
-            let cmd_path = if cfg!(windows) && !path.ends_with(".cmd") && !path.ends_with(".exe") {
-                format!("{}.cmd", path)
-            } else {
-                path.to_string()
-            };
-            match run_version(&cmd_path, spec.version_args).await {
+        for &candidate in spec.candidates {
+            match run_version(candidate, spec.version_args).await {
                 Ok(ver) => {
                     version = Some(ver);
                     status = "installed".to_string();
                     if used_source.is_none() {
-                        used_source = Some("path".to_string());
+                        used_source = Some("version".to_string());
                     }
+                    break;
                 }
                 Err(e) => {
-                    status = "error".to_string();
                     error = Some(e);
                 }
             }
@@ -243,7 +249,8 @@ async fn detect_tool_inner(spec: ToolSpec) -> ToolCheckResult {
     }
 }
 
-/// Detect an npm package by running `npm ls -g <pkg> --depth=0`
+/// Detect an npm package by checking global install, then scanning npx cache.
+/// Never triggers network downloads — pure local detection.
 async fn detect_npm_package(spec: ToolSpec, pkg: &str) -> ToolCheckResult {
     let candidates: Vec<String> = if spec.candidates.is_empty() {
         vec![pkg.to_string()]
@@ -251,21 +258,19 @@ async fn detect_npm_package(spec: ToolSpec, pkg: &str) -> ToolCheckResult {
         spec.candidates.iter().map(|c| c.to_string()).collect()
     };
 
-    // Check global install: npm ls -g ccg-workflow --depth=0
-    let check_cmd = format!("npm ls -g {} --depth=0", pkg);
     let mut status = "not_found".to_string();
     let mut version: Option<String> = None;
     let mut resolved_path: Option<String> = None;
     let mut error: Option<String> = None;
     let mut source: Option<String> = None;
 
+    // 1. Check global install: npm ls -g <pkg> --depth=0
+    let check_cmd = format!("npm ls -g {} --depth=0", pkg);
     if let Ok(output) = run_cmd_output(&check_cmd).await {
         let stdout = decode_output(&output.stdout);
-        // npm ls output contains "<pkg>@<version>" if installed
         for line in stdout.lines() {
             let trimmed = line.trim();
             if trimmed.contains(pkg) {
-                // Extract version from "ccg-workflow@1.2.3"
                 if let Some(at_pos) = trimmed.rfind('@') {
                     let ver = trimmed[at_pos + 1..].trim();
                     if !ver.is_empty() {
@@ -277,34 +282,26 @@ async fn detect_npm_package(spec: ToolSpec, pkg: &str) -> ToolCheckResult {
                 break;
             }
         }
-    }
-
-    // If not found globally, check npx cache by trying npx --no <pkg> --version
-    if version.is_none() {
-        let npx_cmd = format!("npx --yes {} --version", pkg);
-        if let Ok(output) = run_cmd_output(&npx_cmd).await {
-            if output.status.success() {
-                let stdout = decode_output(&output.stdout);
-                if let Some(ver) = first_non_empty_line(&stdout) {
-                    version = Some(ver);
-                    status = "installed".to_string();
-                    source = Some("npx".to_string());
+        // Resolve global path
+        if status == "installed" {
+            if let Ok(root_output) = run_cmd_output("npm root -g").await {
+                if root_output.status.success() {
+                    let root_stdout = decode_output(&root_output.stdout);
+                    if let Some(root) = first_non_empty_line(&root_stdout) {
+                        resolved_path = Some(format!("{}\\{}", root, pkg));
+                    }
                 }
             }
         }
     }
 
-    // Try to find the path
-    let npm_root_cmd = "npm root -g";
-    if let Ok(output) = run_cmd_output(npm_root_cmd).await {
-        if output.status.success() {
-            let stdout = decode_output(&output.stdout);
-            if let Some(root) = first_non_empty_line(&stdout) {
-                let pkg_path = format!("{}\\{}", root, pkg);
-                if status == "installed" {
-                    resolved_path = Some(pkg_path);
-                }
-            }
+    // 2. If not global, scan npx cache directory (deterministic, no network)
+    if version.is_none() {
+        if let Some((ver, path)) = scan_npx_cache(pkg).await {
+            version = Some(ver);
+            resolved_path = Some(path);
+            status = "installed".to_string();
+            source = Some("npx-cache".to_string());
         }
     }
 
@@ -325,6 +322,62 @@ async fn detect_npm_package(spec: ToolSpec, pkg: &str) -> ToolCheckResult {
         install_url: Some(spec.install_url.to_string()),
         install_hint: Some(spec.install_hint.to_string()),
     }
+}
+
+/// Scan npx cache for a cached package. Uses `npm config get cache` to locate
+/// the cache dir, then checks _npx/*/node_modules/<pkg>/package.json.
+/// Returns (version, path) if found. Pure filesystem read, zero side effects.
+async fn scan_npx_cache(pkg: &str) -> Option<(String, String)> {
+    // Get the actual npm cache path (e.g. C:\Users\xx\AppData\Local\npm-cache)
+    let cache_root = get_npm_cache_dir().await?;
+    let npx_cache = std::path::PathBuf::from(&cache_root).join("_npx");
+
+    let mut entries = tokio::fs::read_dir(&npx_cache).await.ok()?;
+    let mut best: Option<(String, String)> = None;
+
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let pkg_json_path = entry.path()
+            .join("node_modules")
+            .join(pkg)
+            .join("package.json");
+
+        if let Ok(content) = tokio::fs::read_to_string(&pkg_json_path).await {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(ver) = json.get("version").and_then(|v| v.as_str()) {
+                    let pkg_path = entry.path().join("node_modules").join(pkg);
+                    let ver_str = ver.to_string();
+                    // Keep the highest version if multiple caches exist
+                    if best.as_ref().map_or(true, |(v, _)| ver_str > *v) {
+                        best = Some((ver_str, pkg_path.to_string_lossy().to_string()));
+                    }
+                }
+            }
+        }
+    }
+    best
+}
+
+/// Get npm cache directory via `npm config get cache`.
+async fn get_npm_cache_dir() -> Option<String> {
+    if let Ok(output) = run_cmd_output("npm config get cache").await {
+        if output.status.success() {
+            return first_non_empty_line(&decode_output(&output.stdout));
+        }
+    }
+    // Fallback: common default paths
+    if let Ok(home) = std::env::var("LOCALAPPDATA") {
+        let default = std::path::PathBuf::from(&home).join("npm-cache");
+        if default.exists() {
+            return Some(default.to_string_lossy().to_string());
+        }
+    }
+    if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
+        let default = std::path::PathBuf::from(&home).join(".npm");
+        if default.exists() {
+            return Some(default.to_string_lossy().to_string());
+        }
+    }
+    None
 }
 
 async fn resolve_path(spec: ToolSpec) -> (Option<String>, Option<String>) {
