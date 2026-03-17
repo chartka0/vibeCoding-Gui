@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, type Component, markRaw } from "vue";
 import { NLayout, NLayoutContent } from "naive-ui";
 import { useWorkspaceStore } from "../store/workspace";
 
@@ -49,7 +49,25 @@ const panelTitles: Record<string, { title: string; subtitle?: string }> = {
   environment: { title: '环境配置', subtitle: '工具链检测' },
 };
 
+// Panel component registry — markRaw to avoid reactive overhead on components
+const panelComponents: Record<string, Component> = {
+  workflow: markRaw(WorkflowPanel),
+  'codex-exec': markRaw(CodexExecPanel),
+  plan: markRaw(PlanPanel),
+  build: markRaw(BuildPanel),
+  review: markRaw(ReviewPanel),
+  diagnostics: markRaw(DiagnosticsPanel),
+  test: markRaw(TestPanel),
+  spec: markRaw(SpecPanel),
+  commit: markRaw(CommitPanel),
+  rollback: markRaw(RollbackPanel),
+  history: markRaw(HistoryPanel),
+  settings: markRaw(SettingsPanel),
+  environment: markRaw(EnvironmentPanel),
+};
+
 const currentPanel = computed(() => panelTitles[selectedKey.value] || { title: selectedKey.value });
+const currentComponent = computed(() => panelComponents[selectedKey.value] || null);
 
 function handleBack() {
   workspaceStore.currentWorkspaceId = null;
@@ -59,27 +77,17 @@ function handleBack() {
 
 <template>
   <n-layout has-sider style="height: 100vh;">
-    <Sidebar 
-      v-model:selectedKey="selectedKey" 
+    <Sidebar
+      v-model:selectedKey="selectedKey"
       @back-to-overview="handleBack"
     />
     <n-layout>
       <Header :title="currentPanel.title" :subtitle="currentPanel.subtitle" />
       <n-layout-content style="padding: 20px; background: #101014;" :native-scrollbar="false">
-        <WorkflowPanel v-if="selectedKey === 'workflow'" />
-        <CodexExecPanel v-else-if="selectedKey === 'codex-exec'" />
-        <PlanPanel v-else-if="selectedKey === 'plan'" />
-        <BuildPanel v-else-if="selectedKey === 'build'" />
-        <ReviewPanel v-else-if="selectedKey === 'review'" />
-        <DiagnosticsPanel v-else-if="selectedKey === 'diagnostics'" />
-        <TestPanel v-else-if="selectedKey === 'test'" />
-        <SpecPanel v-else-if="selectedKey === 'spec'" />
-        <CommitPanel v-else-if="selectedKey === 'commit'" />
-        <RollbackPanel v-else-if="selectedKey === 'rollback'" />
-        <HistoryPanel v-else-if="selectedKey === 'history'" />
-        <SettingsPanel v-else-if="selectedKey === 'settings'" />
-        <EnvironmentPanel v-else-if="selectedKey === 'environment'" />
-        <div v-else style="display:flex; justify-content:center; align-items:center; height: 100%; color: #555; font-size: 14px;">
+        <KeepAlive>
+          <component :is="currentComponent" v-if="currentComponent" :key="selectedKey" />
+        </KeepAlive>
+        <div v-if="!currentComponent" style="display:flex; justify-content:center; align-items:center; height: 100%; color: #555; font-size: 14px;">
           模块开发中...
         </div>
       </n-layout-content>
