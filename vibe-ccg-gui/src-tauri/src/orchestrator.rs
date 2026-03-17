@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command as AsyncCommand;
 use uuid::Uuid;
 use chrono::Utc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Find git-bash (bash.exe) path for injecting CLAUDE_CODE_GIT_BASH_PATH.
 /// Claude Code checks this env var to verify git-bash is available.
@@ -411,6 +411,14 @@ pub async fn run_workflow_step(
         e.to_string()
     })?;
 
+    // Track PID for cancellation support
+    let proc_key = format!("{}-{}", run_id, step_index);
+    if let Some(pid) = child.id() {
+        let state = app.state::<crate::AppState>();
+        let mut procs = state.active_processes.lock().await;
+        procs.insert(proc_key.clone(), pid);
+    }
+
     // Write prompt via stdin then close — claude reads piped stdin as the prompt
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(prompt.as_bytes()).await;
@@ -504,6 +512,14 @@ pub async fn run_workflow_step(
 
     // Wait for exit
     let exit = child.wait().await.map_err(|e| e.to_string())?;
+
+    // Clean up PID tracking
+    {
+        let state = app.state::<crate::AppState>();
+        let mut procs = state.active_processes.lock().await;
+        procs.remove(&proc_key);
+    }
+
     let (detected_sid, full_text) = match stdout_handle {
         Some(h) => h.await.map_err(|e| e.to_string())?,
         None => (None, String::new()),
@@ -536,4 +552,34 @@ pub async fn run_workflow_step(
     });
 
     Ok(step_id)
+}
+
+/// Cancel a running workflow step by killing its process tree.
+#[tauri::command]
+pub async fn cancel_workflow_step(
+    app: AppHandle,
+    run_id: String,
+    step_index: i32,
+) -> Result<(), String> {
+    let key = format!("{}-{}", run_id, step_index);
+    let state = app.state::<crate::AppState>();
+    let mut procs = state.active_processes.lock().await;
+
+    if let Some(pid) = procs.remove(&key) {
+        #[cfg(windows)]
+        {
+            // taskkill /T kills the entire process tree
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .output();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output();
+        }
+    }
+
+    Ok(())
 }

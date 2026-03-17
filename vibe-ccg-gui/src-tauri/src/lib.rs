@@ -35,7 +35,8 @@ pub struct WorkflowRun {
 
 // Global App State
 pub struct AppState {
-    pub active_processes: Arc<Mutex<HashMap<String, bool>>>,
+    /// Maps "{run_id}-{step_index}" → child PID for cancellation support
+    pub active_processes: Arc<Mutex<HashMap<String, u32>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -141,6 +142,7 @@ pub fn run() {
             orchestrator::get_run_steps,
             orchestrator::run_ccg_command,
             orchestrator::run_workflow_step,
+            orchestrator::cancel_workflow_step,
             environment::check_environment,
         ])
         .run(tauri::generate_context!())
