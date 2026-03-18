@@ -310,6 +310,14 @@ pub async fn run_ccg_command(
 
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
+    // Track PID for cancellation support (use step_index=0 convention)
+    let proc_key = format!("{}-0", run_id);
+    if let Some(pid) = child.id() {
+        let state = app.state::<crate::AppState>();
+        let mut procs = state.active_processes.lock().await;
+        procs.insert(proc_key.clone(), pid);
+    }
+
     // Pipe the prompt (including /skill prefix) via stdin
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(full_prompt.as_bytes()).await;
@@ -341,6 +349,14 @@ pub async fn run_ccg_command(
     }
 
     let status = child.wait().await.map_err(|e| e.to_string())?;
+
+    // Clean up PID tracking
+    {
+        let state = app.state::<crate::AppState>();
+        let mut procs = state.active_processes.lock().await;
+        procs.remove(&proc_key);
+    }
+
     let final_status = if status.success() { "done" } else { "error" };
     let _ = app.emit(&format!("run-done-{}", run_id), final_status);
 

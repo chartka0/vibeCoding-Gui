@@ -71,6 +71,20 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[tauri::command]
+fn read_text_file(path: String, base_path: String) -> Result<String, String> {
+    use std::path::PathBuf;
+
+    let file_path = if PathBuf::from(&path).is_absolute() {
+        PathBuf::from(&path)
+    } else {
+        PathBuf::from(&base_path).join(&path)
+    };
+
+    std::fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -133,6 +147,7 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().add_migrations("sqlite:vibe-ccg.db", migrations).build())
         .invoke_handler(tauri::generate_handler![
             greet,
+            read_text_file,
             get_workspaces,
             add_workspace,
             get_workflow_runs,
